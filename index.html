@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4f6bff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Planning">
+<meta name="robots" content="noindex">
+<title>Mon Planning</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icone-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+/* =====================================================================
+   MON PLANNING — version téléphone (lecture seule)
+   ===================================================================== */
+:root {
+  --fond: #f4f6fb; --carte: #fff; --texte: #1d2433; --doux: #6b7486;
+  --ligne: #e9ecf2; --ligne-forte: #d5dae5; --accent: #4f6bff; --accent-clair: #eef1ff;
+  --weekend: #f6f7fa; --aujourdhui: #ff4d5e; --orange: #f08c00; --rouge: #e5484d; --vert: #1fa971;
+  --gauche: 146px; --haut-ligne: 46px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  font-size: 14px; color: var(--texte); background: var(--fond);
+  display: flex; flex-direction: column; overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+}
+button { font: inherit; color: inherit; }
+
+/* ---------- En-tête ---------- */
+.haut {
+  background: var(--carte); border-bottom: 1px solid var(--ligne);
+  padding: calc(env(safe-area-inset-top) + 10px) 14px 10px; display: flex; align-items: center; gap: 10px;
+}
+.haut img { width: 34px; height: 34px; border-radius: 9px; flex: none; }
+.titres { flex: 1; min-width: 0; }
+.titres h1 { margin: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.etat { font-size: 12px; color: var(--doux); display: flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; }
+.etat .point { width: 7px; height: 7px; border-radius: 50%; background: var(--vert); flex: none; }
+.etat.horsligne .point { background: var(--orange); }
+.etat.erreur .point { background: var(--rouge); }
+.etat.charge .point { background: var(--accent); animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+.rond { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--ligne-forte); background: var(--carte); font-size: 18px; display: grid; place-items: center; flex: none; }
+.rond:active { background: var(--accent-clair); }
+.rond.tourne span { display: inline-block; animation: tourne .8s linear infinite; }
+@keyframes tourne { to { transform: rotate(360deg); } }
+
+/* ---------- Barre d'outils ---------- */
+.outils { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: var(--carte); border-bottom: 1px solid var(--ligne); overflow-x: auto; scrollbar-width: none; }
+.outils::-webkit-scrollbar { display: none; }
+.groupe { display: inline-flex; background: #f0f2f7; border-radius: 10px; padding: 3px; flex: none; }
+.groupe button { border: 0; background: transparent; padding: 7px 12px; border-radius: 8px; color: var(--doux); font-size: 13.5px; }
+.groupe button.actif { background: var(--carte); color: var(--texte); box-shadow: 0 1px 3px rgba(0,0,0,.12); font-weight: 600; }
+.puce-outil { flex: none; border: 1px solid var(--ligne-forte); background: var(--carte); border-radius: 99px; padding: 7px 12px; font-size: 13.5px; white-space: nowrap; }
+.puce-outil.actif { background: var(--accent-clair); border-color: #c9d2ff; color: var(--accent); font-weight: 600; }
+
+/* ---------- Alertes ---------- */
+.alertes { display: none; gap: 8px; padding: 8px 12px; background: #fff8ec; border-bottom: 1px solid #f6dfb5; overflow-x: auto; scrollbar-width: none; }
+.alertes::-webkit-scrollbar { display: none; }
+.alertes.visible { display: flex; }
+.alerte { flex: none; border: 1px solid #f3cf90; background: white; border-radius: 99px; padding: 6px 11px; font-size: 12.5px; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
+.alerte.retard { border-color: #f2b8ba; color: var(--rouge); }
+.alerte.fete { border-color: #d9c9ff; color: #6b3fd6; }
+.alerte.fete.ferie { border-color: #f2b8ba; color: #c4363b; }
+.alerte b { font-weight: 600; }
+
+/* ---------- Conseil "ajouter à l'écran d'accueil" ---------- */
+.conseil { display: none; margin: 10px 12px 0; padding: 12px 34px 12px 14px; background: var(--carte); border: 1px solid #c9d2ff; border-radius: 12px; font-size: 13.5px; line-height: 1.45; position: relative; }
+.conseil.visible { display: block; }
+.conseil b { color: var(--accent); }
+.conseil button { position: absolute; top: 6px; right: 8px; border: 0; background: transparent; font-size: 18px; color: var(--doux); }
+
+/* ---------- Diagramme ---------- */
+.diagramme { flex: 1; overflow: auto; position: relative; background: var(--carte); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.interieur { position: relative; overflow: clip; min-height: 100%; }
+.fondgrille { position: absolute; top: 0; bottom: 0; left: var(--gauche); pointer-events: none; }
+.col-weekend { position: absolute; top: 0; bottom: 0; background: var(--weekend); }
+.col-mois { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--ligne-forte); }
+.col-semaine { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--ligne); }
+.col-auj { position: absolute; top: 0; bottom: 0; background: rgba(255,77,94,.06); }
+.col-auj::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: var(--aujourdhui); opacity: .75; }
+.col-ferie { position: absolute; top: 0; bottom: 0; background: rgba(229,72,77,.07); }
+.col-fete { position: absolute; top: 0; bottom: 0; border-left: 2px dotted rgba(142,92,247,.55); }
+.masque-gauche { position: sticky; left: 0; width: var(--gauche); height: 0; z-index: 2; }
+.masque-gauche div { position: absolute; top: 0; left: 0; width: var(--gauche); height: 100000px; background: var(--carte); border-right: 1px solid var(--ligne-forte); }
+
+.entete { position: sticky; top: 0; z-index: 6; display: flex; background: var(--carte); border-bottom: 1px solid var(--ligne-forte); height: 52px; }
+.entete.avec-fetes { height: 74px; }
+.coin { position: sticky; left: 0; z-index: 7; width: var(--gauche); flex: none; background: var(--carte); border-right: 1px solid var(--ligne-forte); display: flex; align-items: flex-end; padding: 0 10px 7px; font-weight: 700; color: var(--doux); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; }
+.frise { position: relative; flex: none; }
+.mois { position: absolute; top: 0; height: 22px; padding: 4px 6px; font-weight: 700; font-size: 12px; white-space: nowrap; overflow: clip; border-left: 1px solid var(--ligne-forte); text-transform: capitalize; }
+.mois span { position: sticky; left: calc(var(--gauche) + 6px); }
+.jour { position: absolute; top: 22px; height: 30px; text-align: center; font-size: 11.5px; color: var(--doux); line-height: 1.1; padding-top: 2px; }
+.jour .lettre { font-size: 9.5px; display: block; opacity: .8; }
+.jour.we { color: #a4abba; }
+.jour.ferie { color: var(--rouge); }
+.jour.auj b { background: var(--aujourdhui); color: white; border-radius: 99px; padding: 0 4px; }
+.fete-etiq { position: absolute; top: 53px; height: 19px; padding: 1px 6px; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; transform: translateX(-50%); background: #f3eeff; color: #6b3fd6; line-height: 17px; }
+.fete-etiq.ferie { background: #fdecec; color: #c4363b; }
+.fete-etiq.mini { padding: 1px 2px; background: transparent; }
+
+.ligne { display: flex; height: var(--haut-ligne); border-bottom: 1px solid var(--ligne); position: relative; }
+.gauche { position: sticky; left: 0; z-index: 3; width: var(--gauche); flex: none; background: var(--carte); border-right: 1px solid var(--ligne-forte); display: flex; align-items: center; gap: 7px; padding: 0 6px 0 9px; }
+.ligne:active .gauche { background: var(--accent-clair); }
+.pastille { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.infos { flex: 1; min-width: 0; line-height: 1.2; }
+.nom { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-size: 13px; }
+.dates { font-size: 11px; color: var(--doux); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dates .alerte-txt { color: var(--orange); font-weight: 600; }
+.dates .retard-txt { color: var(--rouge); font-weight: 600; }
+.ligne.faite .nom { text-decoration: line-through; color: var(--doux); font-weight: 400; }
+.piste { position: relative; flex: none; }
+.barre-tache { position: absolute; top: 9px; height: 28px; border-radius: 7px; color: white; z-index: 1; display: flex; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+.barre-tache .texte { position: sticky; left: calc(var(--gauche) + 2px); max-width: 100%; padding: 0 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 600; }
+.barre-tache.faite { opacity: .42; }
+.barre-tache.faite .texte::before { content: "✓ "; }
+.barre-tache.alerte { outline: 2px solid var(--orange); outline-offset: 2px; }
+.barre-tache.retard { outline: 2px solid var(--rouge); outline-offset: 2px; }
+.pastilles { display: inline-flex; flex: none; }
+.pastilles i { width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--carte); margin-left: -4px; }
+.pastilles i:first-child { margin-left: 0; }
+.ligne.dans-pochette .gauche { padding-left: 16px; box-shadow: inset 4px 0 0 var(--coul-p); }
+.entete-pochette { height: 50px; }
+.entete-pochette .gauche { background: color-mix(in srgb, var(--coul-p) 10%, white); gap: 5px; padding-left: 6px; }
+.entete-pochette .piste { background: color-mix(in srgb, var(--coul-p) 4%, transparent); }
+.entete-pochette .nom { font-weight: 700; font-size: 13.5px; }
+.entete-pochette .fleche { width: 16px; flex: none; color: var(--doux); font-size: 12px; text-align: center; }
+.barre-pochette { position: absolute; top: 11px; height: 28px; border-radius: 8px; z-index: 1; overflow: clip; background: color-mix(in srgb, var(--coul-p) 22%, white); border: 2px solid var(--coul-p); display: flex; align-items: center; }
+.barre-pochette .progression { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--coul-p) 45%, white); }
+.barre-pochette .texte { position: sticky; left: calc(var(--gauche) + 4px); padding: 0 8px; font-size: 12px; font-weight: 700; color: color-mix(in srgb, var(--coul-p) 75%, black); white-space: nowrap; z-index: 1; }
+.barre-pochette.ouverte { top: 34px; height: 7px; border: 0; border-radius: 0; background: var(--coul-p); opacity: .55; overflow: visible; }
+.barre-pochette.ouverte::before, .barre-pochette.ouverte::after { content: ""; position: absolute; top: 0; width: 3px; height: 12px; background: var(--coul-p); }
+.barre-pochette.ouverte::before { left: 0; } .barre-pochette.ouverte::after { right: 0; }
+.fiche .tache-liste { display: flex; gap: 10px; align-items: center; width: 100%; padding: 11px 4px; border: 0; border-bottom: 1px solid var(--ligne); background: transparent; text-align: left; font-size: 14.5px; }
+.fiche .tache-liste small { display: block; color: var(--doux); font-size: 12px; }
+.etiq-dehors { position: absolute; top: 0; height: var(--haut-ligne); display: flex; align-items: center; font-size: 12px; font-weight: 600; white-space: nowrap; pointer-events: none; }
+.vide { position: sticky; left: 0; z-index: 3; width: min(92vw, 420px); margin: 22px 12px; padding: 18px 20px; background: var(--carte); border: 1px dashed var(--ligne-forte); border-radius: 12px; color: var(--doux); font-size: 14.5px; line-height: 1.6; }
+.vide b { color: var(--texte); }
+
+/* ---------- Fiche détail (glisse du bas) ---------- */
+.voile { position: fixed; inset: 0; background: rgba(20,28,45,.35); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
+.voile.visible { opacity: 1; pointer-events: auto; }
+.fiche {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background: var(--carte); border-radius: 18px 18px 0 0;
+  padding: 10px 20px calc(env(safe-area-inset-bottom) + 20px); transform: translateY(105%); transition: transform .25s ease;
+  box-shadow: 0 -10px 40px rgba(0,0,0,.15); max-height: 80vh; overflow-y: auto;
+}
+.fiche.visible { transform: none; }
+.fiche .poignee { width: 40px; height: 5px; border-radius: 3px; background: var(--ligne-forte); margin: 0 auto 14px; }
+.fiche h2 { margin: 0 0 4px; font-size: 19px; display: flex; gap: 10px; align-items: center; }
+.fiche h2 .pastille { width: 12px; height: 12px; }
+.fiche .ligne-info { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--ligne); font-size: 14.5px; }
+.fiche .ligne-info span:first-child { width: 24px; text-align: center; flex: none; }
+.fiche .note { white-space: pre-wrap; user-select: text; -webkit-user-select: text; }
+.fiche .badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 12.5px; font-weight: 600; }
+.fiche .lecture { margin-top: 14px; color: var(--doux); font-size: 12.5px; text-align: center; }
+.fiche .fermer { display: block; width: 100%; margin-top: 12px; padding: 13px; border: 0; border-radius: 12px; background: #f0f2f7; font-weight: 600; font-size: 15px; }
+</style>
+</head>
+<body>
+
+<div class="haut">
+  <img src="icone-192.png" alt="">
+  <div class="titres">
+    <h1 id="titre">Mon Planning</h1>
+    <div class="etat charge" id="etat"><span class="point"></span><span id="etat-txt">Chargement…</span></div>
+  </div>
+  <button class="rond" id="btn-maj" aria-label="Mettre à jour"><span>↻</span></button>
+</div>
+
+<div class="outils">
+  <div class="groupe" id="zoom">
+    <button data-zoom="jour">Jours</button>
+    <button data-zoom="semaine">Sem.</button>
+    <button data-zoom="mois">Mois</button>
+  </div>
+  <button class="puce-outil" id="btn-auj">📍 Aujourd'hui</button>
+  <button class="puce-outil" id="btn-faites">✓ Terminées</button>
+</div>
+
+<div class="alertes" id="alertes"></div>
+<div class="conseil" id="conseil"><button id="conseil-x" aria-label="Fermer">×</button><span id="conseil-txt"></span></div>
+
+<div class="diagramme" id="diagramme"></div>
+
+<div class="voile" id="voile"></div>
+<div class="fiche" id="fiche"><div class="poignee"></div><div id="fiche-contenu"></div>
+  <button class="fermer" id="fiche-fermer">Fermer</button></div>
+
+<script>
+/* =====================================================================
+   1. D'OÙ VIENNENT LES DONNÉES ?
+   Le lien contient  ?p=<numéro du gist>&u=<compte GitHub>.
+   La page lit le gist (la "boîte aux lettres") sur GitHub, et garde une
+   copie dans le téléphone pour pouvoir s'afficher sans Internet.
+   ===================================================================== */
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+let source = null;
+try {
+  if (params.get("p")) {
+    source = { p: params.get("p"), u: params.get("u") || "" };
+    localStorage.setItem("mp-source", JSON.stringify(source));
+  } else {
+    source = JSON.parse(localStorage.getItem("mp-source") || "null");
+  }
+} catch (e) { source = params.get("p") ? { p: params.get("p"), u: params.get("u") || "" } : null; }
+
+const CLE_COPIE = source ? "mp-copie-" + source.p : null;
+let donnees = null;          // { titre, maj, fetes, taches: [...] }
+let reglages = { zoom: "jour", faites: true };
+try { Object.assign(reglages, JSON.parse(localStorage.getItem("mp-reglages") || "{}")); } catch (e) {}
+function garderReglages() { try { localStorage.setItem("mp-reglages", JSON.stringify(reglages)); } catch (e) {} }
+
+/* =====================================================================
+   2. DATES (même logique que l'app du PC)
+   ===================================================================== */
+const MS_JOUR = 86400000;
+const LARGEUR_JOUR = { jour: 38, semaine: 16, mois: 6 };
+const NOMS_JOURS = ["D", "L", "M", "M", "J", "V", "S"];
+const ALERTE_JOURS = 2;
+function versNum(t) { const [a, m, j] = t.split("-").map(Number); return Math.round(Date.UTC(a, m - 1, j) / MS_JOUR); }
+function versTexte(n) { return new Date(n * MS_JOUR).toISOString().slice(0, 10); }
+function aujourdhui() { const d = new Date(); return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / MS_JOUR); }
+function jourSemaine(n) { return new Date(n * MS_JOUR).getUTCDay(); }
+function dateCourte(t) { return new Date(versNum(t) * MS_JOUR).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" }); }
+function dateLongue(t) { return new Date(versNum(t) * MS_JOUR).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }); }
+function pluriel(n, mot) { return n + " " + mot + (Math.abs(n) > 1 ? "s" : ""); }
+function echapper(t) { return String(t ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function couleurSure(c) { return /^#[0-9a-fA-F]{3,8}$/.test(c || "") ? c : "#4f6bff"; }
+function dateValide(t) { return typeof t === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t); }
+
+/* ---------- Fêtes et jours fériés (même calcul que sur le PC) ---------- */
+const ALERTE_FETES_JOURS = 7;      // le bandeau prévient une semaine avant
+
+/* Date de Pâques (méthode de calcul "grégorienne anonyme") */
+function paques(annee) {
+  const a = annee % 19, b = Math.floor(annee / 100), c = annee % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mois = Math.floor((h + l - 7 * m + 114) / 31), jour = ((h + l - 7 * m + 114) % 31) + 1;
+  return Math.round(Date.UTC(annee, mois - 1, jour) / MS_JOUR);
+}
+const jourFixe = (a, m, j) => Math.round(Date.UTC(a, m - 1, j) / MS_JOUR);
+function dernierDimanche(a, m) { let n = jourFixe(a, m + 1, 1) - 1; while (jourSemaine(n) !== 0) n--; return n; }
+function nemeDimanche(a, m, rang) { let n = jourFixe(a, m, 1); while (jourSemaine(n) !== 0) n++; return n + 7 * (rang - 1); }
+
+const cacheFetes = {};
+function fetesDeLAnnee(a) {
+  if (cacheFetes[a]) return cacheFetes[a];
+  const p = paques(a);
+  let meres = dernierDimanche(a, 5);
+  if (meres === p + 49) meres += 7;               // si elle tombe le jour de la Pentecôte -> 1er dimanche de juin
+  const liste = [
+    { num: jourFixe(a, 1, 1),  nom: "Jour de l'An",        emoji: "🎆", ferie: true },
+    { num: jourFixe(a, 1, 6),  nom: "Épiphanie",            emoji: "👑", ferie: false },
+    { num: jourFixe(a, 2, 2),  nom: "Chandeleur",           emoji: "🥞", ferie: false },
+    { num: jourFixe(a, 2, 14), nom: "Saint-Valentin",       emoji: "❤️", ferie: false },
+    { num: p,                  nom: "Pâques",               emoji: "🐣", ferie: false },
+    { num: p + 1,              nom: "Lundi de Pâques",      emoji: "🐣", ferie: true },
+    { num: jourFixe(a, 5, 1),  nom: "Fête du Travail",      emoji: "🌼", ferie: true },
+    { num: jourFixe(a, 5, 8),  nom: "Victoire 1945",        emoji: "🕊️", ferie: true },
+    { num: p + 39,             nom: "Ascension",            emoji: "⛪", ferie: true },
+    { num: p + 50,             nom: "Lundi de Pentecôte",   emoji: "🕊️", ferie: true },
+    { num: meres,              nom: "Fête des mères",       emoji: "💐", ferie: false },
+    { num: nemeDimanche(a, 6, 3), nom: "Fête des pères",    emoji: "👔", ferie: false },
+    { num: jourFixe(a, 6, 21), nom: "Fête de la musique",   emoji: "🎵", ferie: false },
+    { num: jourFixe(a, 7, 14), nom: "Fête nationale",       emoji: "🎇", ferie: true },
+    { num: jourFixe(a, 8, 15), nom: "Assomption",           emoji: "⛪", ferie: true },
+    { num: jourFixe(a, 10, 31), nom: "Halloween",           emoji: "🎃", ferie: false },
+    { num: jourFixe(a, 11, 1), nom: "Toussaint",            emoji: "🕯️", ferie: true },
+    { num: jourFixe(a, 11, 11), nom: "Armistice 1918",      emoji: "🎖️", ferie: true },
+    { num: jourFixe(a, 12, 25), nom: "Noël",                emoji: "🎄", ferie: true },
+    { num: jourFixe(a, 12, 31), nom: "Saint-Sylvestre",     emoji: "🥂", ferie: false },
+  ].sort((x, y) => x.num - y.num);
+  return (cacheFetes[a] = liste);
+}
+/* Toutes les fêtes entre deux numéros de jour (inclus) */
+function fetesEntre(n1, n2) {
+  const a1 = new Date(n1 * MS_JOUR).getUTCFullYear(), a2 = new Date(n2 * MS_JOUR).getUTCFullYear();
+  const res = [];
+  for (let a = a1; a <= a2; a++) for (const f of fetesDeLAnnee(a)) if (f.num >= n1 && f.num <= n2) res.push(f);
+  return res;
+}
+function quandTexte(reste) {
+  return reste === 0 ? "aujourd'hui" : reste === 1 ? "demain" : "dans " + reste + " jours";
+}
+
+/* =====================================================================
+   LIGNES ET POCHETTES  (ce bloc est le même sur le PC et sur le téléphone)
+   ---------------------------------------------------------------------
+   - Une LIGNE peut contenir plusieurs tâches : elles ont le même champ "ligne".
+     Une tâche sans "ligne" a sa propre ligne (sa clé = son id).
+   - Une POCHETTE (un projet) regroupe des lignes : champ "pochette" = id de la pochette.
+     donnees.pochettes = [{ id, nom, couleur, ouverte }]
+   - Si deux tâches d'une ligne se chevauchent, on les met l'une sous l'autre
+     (des "voies"), pour que rien ne soit caché.
+   ===================================================================== */
+function cleLigne(t) { return t.ligne || t.id; }
+
+/* Calcule début, fin et voies d'une ligne (ou d'une pochette) */
+function calculerBornes(e, taches) {
+  e.debut = Infinity; e.fin = -Infinity;
+  for (const t of taches) { e.debut = Math.min(e.debut, versNum(t.debut)); e.fin = Math.max(e.fin, versNum(t.fin)); }
+}
+function calculerVoies(l) {
+  const finsVoies = [];               // pour chaque voie : le dernier jour occupé
+  l.voie = {};
+  for (const t of l.taches) {
+    const d = versNum(t.debut);
+    let v = finsVoies.findIndex(f => f < d);
+    if (v === -1) { v = finsVoies.length; finsVoies.push(0); }
+    finsVoies[v] = versNum(t.fin);
+    l.voie[t.id] = v;
+  }
+  l.nbVoies = Math.max(1, finsVoies.length);
+}
+function nomLigne(l) { return l.taches.length ? l.taches[0].nom : (l.toutes[0] ? l.toutes[0].nom : ""); }
+
+/* Construit ce qu'on affiche, dans l'ordre : une liste d'éléments
+     { type: "pochette", p, lignes: [lignes...] }   ou   { type: "ligne", cle, taches, ... }
+   tri = "debut" | "fin" | "nom" | "manuel" (= ordre de la liste des tâches) */
+function construireStructure(taches, pochettes, tri, masquerFaites) {
+  pochettes = pochettes || [];
+  const pochParId = new Map(pochettes.map(p => [p.id, p]));
+
+  // 1. Regrouper les tâches par ligne
+  const lignes = new Map();
+  taches.forEach((t, index) => {
+    const cle = cleLigne(t);
+    let l = lignes.get(cle);
+    if (!l) { l = { type: "ligne", cle, toutes: [], index }; lignes.set(cle, l); }
+    l.toutes.push(t);
+  });
+  for (const l of lignes.values()) {
+    const pid = l.toutes[0].pochette;
+    l.pochette = pid && pochParId.has(pid) ? pid : null;
+    l.taches = l.toutes.filter(t => !(masquerFaites && t.fait))
+      .sort((a, b) => a.debut.localeCompare(b.debut) || a.fin.localeCompare(b.fin));
+    calculerBornes(l, l.taches);
+    calculerVoies(l);
+  }
+
+  // 2. Ranger les lignes dans leurs pochettes
+  const elements = [];
+  const blocs = new Map();
+  pochettes.forEach((p, i) => blocs.set(p.id, { type: "pochette", p, cle: "p:" + p.id, lignes: [], index: Infinity, ordrePochette: i, toutes: [] }));
+  for (const l of lignes.values()) {
+    if (l.pochette) {
+      const b = blocs.get(l.pochette);
+      b.lignes.push(l); b.index = Math.min(b.index, l.index); b.toutes.push(...l.toutes);
+    } else if (l.taches.length) elements.push(l);
+  }
+  for (const b of blocs.values()) {
+    b.lignes = b.lignes.filter(l => l.taches.length);
+    b.taches = b.lignes.flatMap(l => l.taches);
+    calculerBornes(b, b.taches);
+    if (b.toutes.length && !b.taches.length) continue;     // toutes ses tâches sont masquées
+    elements.push(b);
+  }
+
+  // 3. Trier
+  const nom = (e) => (e.type === "pochette" ? e.p.nom : nomLigne(e)) || "";
+  const comparer = (a, b) => {
+    if (tri === "manuel") return a.index - b.index || (a.ordrePochette || 0) - (b.ordrePochette || 0);
+    if (tri === "nom") return nom(a).localeCompare(nom(b), "fr");
+    if (tri === "fin") return a.fin - b.fin || a.debut - b.debut;
+    return a.debut - b.debut || a.fin - b.fin;
+  };
+  elements.sort(comparer);
+  for (const e of elements) if (e.type === "pochette") e.lignes.sort(comparer);
+  return elements;
+}
+
+function etatAlerte(t) {
+  if (t.fait) return null;
+  const reste = versNum(t.fin) - aujourdhui();
+  if (reste < 0) return { type: "retard", reste, texte: "En retard de " + pluriel(-reste, "jour"), court: "en retard (" + (-reste) + " j)" };
+  if (reste <= ALERTE_JOURS) {
+    const txt = reste === 0 ? "Se termine aujourd'hui" : reste === 1 ? "Se termine demain" : "Se termine dans " + reste + " jours";
+    const court = reste === 0 ? "fin aujourd'hui" : reste === 1 ? "fin demain" : "fin dans " + reste + " j";
+    return { type: "alerte", reste, texte: txt, court };
+  }
+  return null;
+}
+function ilYa(iso) {
+  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!isFinite(min)) return "";
+  if (min < 1) return "à l'instant";
+  if (min < 60) return "il y a " + min + " min";
+  const h = Math.round(min / 60);
+  if (h < 24) return "il y a " + h + " h";
+  return "le " + new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + " à " +
+         new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+/* =====================================================================
+   3. CHARGER (Internet -> sinon copie gardée dans le téléphone)
+   ===================================================================== */
+let chargementEnCours = false, etatConnexion = "charge", messageErreur = "";
+
+function afficherEtat() {
+  const e = $("etat");
+  e.className = "etat " + etatConnexion;
+  let txt = "";
+  if (etatConnexion === "charge") txt = "Mise à jour…";
+  else if (etatConnexion === "ok") txt = "À jour · modifié " + ilYa(donnees.maj);
+  else if (etatConnexion === "horsligne") txt = "Hors ligne · version " + (donnees ? "modifiée " + ilYa(donnees.maj) : "indisponible");
+  else txt = messageErreur;
+  $("etat-txt").textContent = txt;
+}
+
+function verifier(d) {
+  if (!d || !Array.isArray(d.taches)) throw new Error("format");
+  d.taches = d.taches.filter(t => t && dateValide(t.debut) && dateValide(t.fin));
+  return d;
+}
+
+async function lireEnLigne() {
+  // 1er essai : l'API GitHub (toujours à jour)
+  try {
+    const rep = await fetch("https://api.github.com/gists/" + encodeURIComponent(source.p), { cache: "no-store", headers: { Accept: "application/vnd.github+json" } });
+    if (rep.status === 404) { const e = new Error("introuvable"); e.introuvable = true; throw e; }
+    if (!rep.ok) throw new Error("api " + rep.status);
+    const g = await rep.json();
+    const f = g.files && (g.files["planning.json"] || Object.values(g.files)[0]);
+    if (!f) throw new Error("vide");
+    let texte = f.content;
+    if (f.truncated && f.raw_url) texte = await (await fetch(f.raw_url, { cache: "no-store" })).text();
+    return verifier(JSON.parse(texte));
+  } catch (e) {
+    if (e.introuvable || !source.u) throw e;
+    // 2e essai : le fichier brut (si l'API est saturée)
+    const rep = await fetch(`https://gist.githubusercontent.com/${encodeURIComponent(source.u)}/${encodeURIComponent(source.p)}/raw/planning.json?t=${Date.now()}`, { cache: "no-store" });
+    if (rep.status === 404) { const e2 = new Error("introuvable"); e2.introuvable = true; throw e2; }
+    if (!rep.ok) throw new Error("raw " + rep.status);
+    return verifier(await rep.json());
+  }
+}
+
+async function charger() {
+  if (!source || chargementEnCours) return;
+  chargementEnCours = true;
+  $("btn-maj").classList.add("tourne");
+  if (!donnees) { etatConnexion = "charge"; afficherEtat(); }
+  try {
+    const d = await lireEnLigne();
+    donnees = d;
+    etatConnexion = "ok";
+    try { localStorage.setItem(CLE_COPIE, JSON.stringify(d)); } catch (e) {}
+  } catch (e) {
+    if (e.introuvable) {
+      // Le lien a été changé ou supprimé : on efface la copie gardée
+      try { localStorage.removeItem(CLE_COPIE); } catch (x) {}
+      donnees = null;
+      etatConnexion = "erreur";
+      messageErreur = "Ce lien ne marche plus";
+      montrerVide("🔗 <b>Ce lien ne marche plus.</b><br>Il a sûrement été remplacé par un nouveau. Demande le nouveau QR code à la personne qui t'a partagé le planning.");
+      return finCharge();
+    }
+    etatConnexion = "horsligne";
+  }
+  finCharge();
+  dessiner();
+}
+function finCharge() {
+  chargementEnCours = false;
+  $("btn-maj").classList.remove("tourne");
+  afficherEtat();
+}
+
+/* =====================================================================
+   4. DESSINER
+   ===================================================================== */
+let debutFrise = null;
+function largeurJour() { return LARGEUR_JOUR[reglages.zoom] || 38; }
+function largeurGauche() { return parseInt(getComputedStyle(document.documentElement).getPropertyValue("--gauche")); }
+function fetesActives() { return !donnees || donnees.fetes !== false; }
+function tachesVisibles() { return donnees ? donnees.taches.filter(t => reglages.faites || !t.fait) : []; }
+/* Pochettes ouvertes / fermées : chaque téléphone retient son choix (sans rien changer sur le PC) */
+let etatPochettes = {};
+try { etatPochettes = JSON.parse(localStorage.getItem("mp-pochettes") || "{}"); } catch (e) {}
+function pochetteOuverte(p) { return p.id in etatPochettes ? etatPochettes[p.id] : p.ouverte !== false; }
+function basculerPochette(id) {
+  const p = (donnees.pochettes || []).find(x => x.id === id);
+  if (!p) return;
+  etatPochettes[id] = !pochetteOuverte(p);
+  try { localStorage.setItem("mp-pochettes", JSON.stringify(etatPochettes)); } catch (e) {}
+  dessiner();
+}
+
+function montrerVide(html) {
+  $("diagramme").innerHTML = `<div class="vide">${html}</div>`;
+  $("alertes").classList.remove("visible");
+}
+
+function calculerPeriode() {
+  const auj = aujourdhui();
+  let min = auj, max = auj;
+  for (const t of donnees.taches) { min = Math.min(min, versNum(t.debut)); max = Math.max(max, versNum(t.fin)); }
+  let debut = min - 7;
+  while (jourSemaine(debut) !== 1) debut--;
+  const dj = largeurJour();
+  const largeurEcran = $("diagramme").clientWidth - largeurGauche();
+  let fin = Math.max(max + 30, auj + 45);
+  fin = Math.max(fin, debut + Math.ceil(largeurEcran / dj) + 7);
+  return { debut, nbJours: fin - debut + 1 };
+}
+
+function dessiner() {
+  majBoutons();
+  if (!donnees) {
+    if (etatConnexion === "horsligne") montrerVide("📡 <b>Pas de connexion.</b><br>Ouvre cette page une première fois avec Internet pour récupérer le planning.");
+    return;
+  }
+  document.title = donnees.titre || "Mon Planning";
+  $("titre").textContent = donnees.titre || "Mon Planning";
+  const zone = $("diagramme");
+  const dj = largeurJour();
+  const { debut, nbJours } = calculerPeriode();
+  const auj = aujourdhui();
+  const decalage = debutFrise === null ? 0 : (debutFrise - debut) * dj;
+  const premiere = debutFrise === null;
+  debutFrise = debut;
+  const largeurFrise = nbJours * dj;
+  const perso = donnees.type === "perso";
+
+  let html = `<div class="interieur" style="width:${largeurGauche() + largeurFrise}px"><div class="fondgrille" style="width:${largeurFrise}px">`;
+  for (let i = 0; i < nbJours; i++) {
+    const n = debut + i, js = jourSemaine(n), x = i * dj;
+    if (js === 0 || js === 6) html += `<div class="col-weekend" style="left:${x}px;width:${dj}px"></div>`;
+    if (new Date(n * MS_JOUR).getUTCDate() === 1) html += `<div class="col-mois" style="left:${x}px"></div>`;
+    else if (js === 1 && dj >= 6) html += `<div class="col-semaine" style="left:${x}px"></div>`;
+    if (n === auj) html += `<div class="col-auj" style="left:${x}px;width:${dj}px"></div>`;
+  }
+  const fetesVisibles = fetesActives() ? fetesEntre(debut, debut + nbJours - 1) : [];
+  for (const f of fetesVisibles) {
+    const x = (f.num - debut) * dj;
+    html += f.ferie ? `<div class="col-ferie" style="left:${x}px;width:${dj}px"></div>`
+                    : `<div class="col-fete" style="left:${x + Math.floor(dj / 2)}px"></div>`;
+  }
+  const numsFeries = new Set(fetesVisibles.filter(f => f.ferie).map(f => f.num));
+  html += `</div><div class="masque-gauche"><div></div></div>`;
+
+  // en-tête
+  const liste = tachesVisibles();
+  html += `<div class="entete${fetesActives() ? " avec-fetes" : ""}"><div class="coin">Tâches (${liste.length})</div><div class="frise" style="width:${largeurFrise}px">`;
+  for (let i = 0; i < nbJours; i++) {
+    const n = debut + i, d = new Date(n * MS_JOUR), js = d.getUTCDay();
+    if (d.getUTCDate() === 1 || i === 0) {
+      const finMois = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) / MS_JOUR;
+      const w = Math.min(finMois - n, nbJours - i) * dj;
+      html += `<div class="mois" style="left:${i * dj}px;width:${w}px"><span>${d.toLocaleDateString("fr-FR", { month: dj >= 16 ? "long" : "short", year: "numeric", timeZone: "UTC" })}</span></div>`;
+    }
+    const classes = "jour" + (js === 0 || js === 6 ? " we" : "") + (numsFeries.has(n) ? " ferie" : "") + (n === auj ? " auj" : "");
+    if (dj >= 30) html += `<div class="${classes}" style="left:${i * dj}px;width:${dj}px"><span class="lettre">${NOMS_JOURS[js]}</span><b>${d.getUTCDate()}</b></div>`;
+    else if (dj >= 16) { if (js === 1 || n === auj) html += `<div class="${classes}" style="left:${i * dj}px;width:${dj}px"><span class="lettre">&nbsp;</span><b>${d.getUTCDate()}</b></div>`; }
+    else if (js === 1) html += `<div class="jour" style="left:${i * dj}px;width:${dj * 7}px;text-align:left;padding-left:3px"><span class="lettre">sem.</span>${d.getUTCDate()}</div>`;
+  }
+  const places = [];
+  const libre = (g, d) => places.every(([x, y]) => d < x - 3 || g > y + 3);
+  for (const f of [...fetesVisibles.filter(f => f.ferie), ...fetesVisibles.filter(f => !f.ferie)]) {
+    const centre = (f.num - debut) * dj + dj / 2, largeur = f.nom.length * 6 + 28;
+    const complet = dj >= 30 && libre(centre - largeur / 2, centre + largeur / 2);
+    const l = complet ? largeur : 20;
+    if (!complet && !libre(centre - l / 2, centre + l / 2)) continue;
+    places.push([centre - l / 2, centre + l / 2]);
+    html += `<div class="fete-etiq${f.ferie ? " ferie" : ""}${complet ? "" : " mini"}" style="left:${centre}px">${f.emoji}${complet ? " " + f.nom : ""}</div>`;
+  }
+  html += `</div></div>`;
+
+  // pochettes et lignes (même organisation que sur le PC)
+  const elements = construireStructure(donnees.taches, donnees.pochettes || [], donnees.tri || "debut", !reglages.faites);
+  const H_VOIE = 34;
+  const barre = (t, l) => {
+    const a = etatAlerte(t);
+    const x = (versNum(t.debut) - debut) * dj;
+    const w = (versNum(t.fin) - versNum(t.debut) + 1) * dj;
+    const haut = 9 + (l.voie[t.id] || 0) * H_VOIE;
+    const nom = echapper(t.nom || "Sans titre");
+    const dedans = w >= (t.nom || "").length * 7 + 22 || w >= 150;
+    const suivante = l.taches.find(o => o !== t && (l.voie[o.id] || 0) === (l.voie[t.id] || 0) && versNum(o.debut) > versNum(t.fin));
+    const place = suivante ? (versNum(suivante.debut) - versNum(t.fin) - 1) * dj : Infinity;
+    const dehors = !dedans && place >= (t.nom || "").length * 7 + 10;
+    return `<div class="barre-tache${t.fait ? " faite" : ""}${a ? " " + a.type : ""}" data-id="${echapper(t.id)}" style="left:${x}px;top:${haut}px;width:${w}px;background:${couleurSure(t.couleur)}">
+              <span class="texte">${dedans ? nom : ""}</span></div>
+            ${dehors ? `<span class="etiq-dehors" style="left:${x + w + 6}px;top:${haut - 9}px">${nom}</span>` : ""}`;
+  };
+  const ligneHtml = (l, p) => {
+    const hauteur = Math.max(46, 10 + l.nbVoies * H_VOIE);
+    let gauche;
+    if (l.taches.length === 1) {
+      const t = l.taches[0], a = etatAlerte(t);
+      const icone = perso && t.visibilite !== "partagee" ? "🔒 " : "";
+      gauche = `<div class="gauche"><span class="pastille" style="background:${couleurSure(t.couleur)}"></span>
+          <div class="infos"><div class="nom">${icone}${echapper(t.nom || "Sans titre")}</div>
+          <div class="dates">${a ? `<span class="${a.type}-txt">${a.type === "retard" ? "⚠" : "⏰"} ${a.court}</span>` : `${dateCourte(t.debut)} → ${dateCourte(t.fin)}`}</div></div></div>`;
+    } else {
+      const a = l.taches.map(etatAlerte).filter(Boolean).sort((x, y) => x.reste - y.reste)[0];
+      gauche = `<div class="gauche"><span class="pastilles">${l.taches.slice(0, 3).map(t => `<i style="background:${couleurSure(t.couleur)}"></i>`).join("")}</span>
+          <div class="infos"><div class="nom">${l.taches.map(t => echapper(t.nom)).join(" · ")}</div>
+          <div class="dates">${a ? `<span class="${a.type}-txt">${a.type === "retard" ? "⚠" : "⏰"} ${a.court}</span>` : `${l.taches.length} tâches`}</div></div></div>`;
+    }
+    const attrs = l.taches.length === 1 ? ` data-id="${echapper(l.taches[0].id)}"` : ` data-ligne="${echapper(l.cle)}"`;
+    return `<div class="ligne${l.taches.length === 1 && l.taches[0].fait ? " faite" : ""}${p ? " dans-pochette" : ""}"${attrs}
+              style="height:${hauteur}px${p ? `;--coul-p:${couleurSure(p.couleur)}` : ""}">
+        ${gauche}<div class="piste" style="width:${largeurFrise}px">${l.taches.map(t => barre(t, l)).join("")}</div></div>`;
+  };
+  for (const e of elements) {
+    if (e.type === "ligne") { html += ligneHtml(e, null); continue; }
+    const p = e.p, ouverte = pochetteOuverte(p), coul = couleurSure(p.couleur);
+    if (!e.taches.length) continue;
+    const faites = e.taches.filter(t => t.fait).length;
+    const nbA = e.taches.map(etatAlerte).filter(Boolean).length;
+    const x = (e.debut - debut) * dj, w = (e.fin - e.debut + 1) * dj;
+    html += `<div class="ligne entete-pochette" data-pochette="${echapper(p.id)}" style="--coul-p:${coul}">
+        <div class="gauche"><span class="fleche">${ouverte ? "▾" : "▸"}</span><span>📁</span>
+          <div class="infos"><div class="nom">${echapper(p.nom)}</div>
+          <div class="dates">${e.taches.length} tâches${faites ? ` (${faites} ✓)` : ""}${nbA ? ` · <span class="alerte-txt">⏰ ${nbA}</span>` : ""}</div></div></div>
+        <div class="piste" style="width:${largeurFrise}px">${ouverte
+          ? `<div class="barre-pochette ouverte" style="left:${x}px;width:${w}px"></div>`
+          : `<div class="barre-pochette" style="left:${x}px;width:${w}px"><span class="progression" style="width:${Math.round(100 * faites / e.taches.length)}%"></span><span class="texte">📁 ${echapper(p.nom)}</span></div>`}</div></div>`;
+    if (ouverte) for (const l of e.lignes) html += ligneHtml(l, p);
+  }
+  if (!donnees.taches.length) html += `<div class="vide">📭 <b>Aucune tâche pour l'instant.</b><br>Les tâches ajoutées sur le PC apparaîtront ici.</div>`;
+  else if (!liste.length) html += `<div class="vide">Toutes les tâches sont terminées 🎉</div>`;
+  html += `</div>`;
+  zone.innerHTML = html;
+  if (premiere) allerAujourdhui(false);
+  else if (decalage) zone.scrollLeft += decalage;
+  dessinerAlertes();
+}
+
+function dessinerAlertes() {
+  const zone = $("alertes"), auj = aujourdhui();
+  const taches = donnees.taches.map(t => ({ t, a: etatAlerte(t) })).filter(x => x.a).sort((x, y) => x.a.reste - y.a.reste);
+  const fetes = fetesActives() ? fetesEntre(auj, auj + ALERTE_FETES_JOURS) : [];
+  if (!taches.length && !fetes.length) { zone.classList.remove("visible"); return; }
+  let html = "";
+  for (const { t, a } of taches) html += `<button class="alerte ${a.type}" data-id="${echapper(t.id)}"><span class="pastille" style="background:${couleurSure(t.couleur)}"></span><b>${echapper(t.nom)}</b> ${a.court}</button>`;
+  for (const f of fetes) {
+    const r = f.num - auj;
+    html += `<button class="alerte fete${f.ferie ? " ferie" : ""}" data-jour="${f.num}">${f.emoji} <b>${f.nom}</b> ${r === 0 ? "aujourd'hui" : r === 1 ? "demain" : "dans " + r + " j"}</button>`;
+  }
+  zone.innerHTML = html;
+  zone.classList.add("visible");
+}
+
+function allerAujourdhui(doux = true) { allerAuJour(aujourdhui(), doux); }
+function allerAuJour(num, doux = true) {
+  if (debutFrise === null) return;
+  $("diagramme").scrollTo({ left: Math.max(0, (num - debutFrise - 2) * largeurJour()), behavior: doux ? "smooth" : "auto" });
+}
+
+/* =====================================================================
+   5. FICHE DÉTAIL (quand on touche une tâche)
+   ===================================================================== */
+function ouvrirFiche(id) {
+  const t = donnees.taches.find(x => x.id === id);
+  if (!t) return;
+  const a = etatAlerte(t);
+  const duree = versNum(t.fin) - versNum(t.debut) + 1;
+  const pendant = fetesActives() ? fetesEntre(versNum(t.debut), versNum(t.fin)) : [];
+  let etat = t.fait ? `<span class="badge" style="background:#e8f7f0;color:var(--vert)">✓ Terminée</span>`
+    : a ? `<span class="badge" style="background:${a.type === "retard" ? "#fdecec;color:var(--rouge)" : "#fff3e0;color:#b36200"}">${a.type === "retard" ? "⚠" : "⏰"} ${a.texte}</span>`
+    : `<span class="badge" style="background:var(--accent-clair);color:var(--accent)">En cours ou à venir</span>`;
+  let html = `<h2><span class="pastille" style="background:${couleurSure(t.couleur)}"></span>${echapper(t.nom)}</h2>
+    <div style="margin:6px 0 4px">${etat}</div>
+    <div class="ligne-info"><span>📅</span><span>Du <b>${dateLongue(t.debut)}</b><br>au <b>${dateLongue(t.fin)}</b></span></div>
+    <div class="ligne-info"><span>⏱</span><span>${pluriel(duree, "jour")}</span></div>`;
+  if (donnees.type === "perso") html += `<div class="ligne-info"><span>${t.visibilite === "partagee" ? "👥" : "🔒"}</span><span>${t.visibilite === "partagee" ? "Partagée avec tes camarades" : "Perso (visible seulement par toi)"}</span></div>`;
+  const poch = t.pochette && (donnees.pochettes || []).find(p => p.id === t.pochette);
+  if (poch) html += `<div class="ligne-info"><span>📁</span><span>${echapper(poch.nom)}</span></div>`;
+  if (pendant.length) html += `<div class="ligne-info"><span>🎉</span><span>Pendant : ${pendant.map(f => f.emoji + " " + f.nom).join(", ")}</span></div>`;
+  if (t.note) html += `<div class="ligne-info"><span>📝</span><span class="note">${echapper(t.note)}</span></div>`;
+  html += `<div class="lecture">👀 Lecture seule — les modifications se font sur le PC</div>`;
+  $("fiche-contenu").innerHTML = html;
+  $("voile").classList.add("visible");
+  $("fiche").classList.add("visible");
+}
+/* Une ligne avec plusieurs tâches : on montre la liste, on touche une tâche pour voir le détail */
+function ouvrirFicheLigne(cle) {
+  const ts = donnees.taches.filter(t => cleLigne(t) === cle && (reglages.faites || !t.fait)).sort((a, b) => a.debut.localeCompare(b.debut));
+  let html = `<h2>📋 ${ts.length} tâches sur cette ligne</h2>`;
+  for (const t of ts) {
+    const a = etatAlerte(t);
+    html += `<button class="tache-liste" data-fiche="${echapper(t.id)}"><span class="pastille" style="background:${couleurSure(t.couleur)}"></span>
+      <span style="flex:1"><b style="${t.fait ? "text-decoration:line-through;color:var(--doux)" : ""}">${echapper(t.nom)}</b>
+      <small>${dateCourte(t.debut)} → ${dateCourte(t.fin)}${a ? " · " + a.court : ""}${t.fait ? " · ✓ terminée" : ""}</small></span>›</button>`;
+  }
+  $("fiche-contenu").innerHTML = html;
+  $("voile").classList.add("visible");
+  $("fiche").classList.add("visible");
+}
+$("fiche-contenu").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-fiche]");
+  if (b) ouvrirFiche(b.dataset.fiche);
+});
+function fermerFiche() { $("voile").classList.remove("visible"); $("fiche").classList.remove("visible"); }
+$("voile").onclick = fermerFiche;
+$("fiche-fermer").onclick = fermerFiche;
+
+$("diagramme").addEventListener("click", (e) => {
+  const enTete = e.target.closest(".entete-pochette");
+  if (enTete) return basculerPochette(enTete.dataset.pochette);
+  const b = e.target.closest(".barre-tache[data-id]");
+  if (b) return ouvrirFiche(b.dataset.id);
+  const l = e.target.closest(".ligne[data-id]");
+  if (l) return ouvrirFiche(l.dataset.id);
+  const m = e.target.closest(".ligne[data-ligne]");
+  if (m) ouvrirFicheLigne(m.dataset.ligne);
+});
+$("alertes").addEventListener("click", (e) => {
+  const b = e.target.closest(".alerte");
+  if (!b) return;
+  if (b.dataset.jour) return allerAuJour(Number(b.dataset.jour));
+  ouvrirFiche(b.dataset.id);
+});
+
+/* =====================================================================
+   6. BOUTONS
+   ===================================================================== */
+function majBoutons() {
+  document.querySelectorAll("#zoom button").forEach(b => b.classList.toggle("actif", b.dataset.zoom === reglages.zoom));
+  $("btn-faites").classList.toggle("actif", reglages.faites);
+  $("btn-faites").textContent = reglages.faites ? "✓ Terminées affichées" : "✓ Terminées masquées";
+}
+$("zoom").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-zoom]");
+  if (!b || !donnees) return;
+  const zone = $("diagramme");
+  const milieu = debutFrise + (zone.scrollLeft + (zone.clientWidth - largeurGauche()) / 2) / largeurJour();
+  reglages.zoom = b.dataset.zoom; garderReglages();
+  dessiner();
+  zone.scrollLeft = (milieu - debutFrise) * largeurJour() - (zone.clientWidth - largeurGauche()) / 2;
+});
+$("btn-auj").onclick = () => allerAujourdhui();
+$("btn-faites").onclick = () => { reglages.faites = !reglages.faites; garderReglages(); if (donnees) dessiner(); else majBoutons(); };
+$("btn-maj").onclick = () => charger();
+
+// Mise à jour quand on revient sur l'app, et toutes les 2 minutes quand elle est ouverte
+document.addEventListener("visibilitychange", () => { if (!document.hidden) charger(); });
+setInterval(() => { if (!document.hidden) charger(); }, 120000);
+setInterval(() => { if (donnees) afficherEtat(); }, 30000);
+let largeurPrec = window.innerWidth;
+window.addEventListener("resize", () => { if (donnees && window.innerWidth !== largeurPrec) { largeurPrec = window.innerWidth; dessiner(); } });
+
+/* =====================================================================
+   7. CONSEIL : AJOUTER À L'ÉCRAN D'ACCUEIL
+   ===================================================================== */
+function conseilEcranAccueil() {
+  const installe = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  let vu = false;
+  try { vu = localStorage.getItem("mp-conseil-vu") === "1"; } catch (e) {}
+  if (installe || vu) return;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  $("conseil-txt").innerHTML = ios
+    ? "📲 <b>Astuce :</b> touche le bouton <b>Partager</b> ⬆️ en bas de Safari, puis <b>« Sur l'écran d'accueil »</b> pour avoir l'icône Mon Planning."
+    : "📲 <b>Astuce :</b> touche le menu <b>⋮</b> de Chrome, puis <b>« Ajouter à l'écran d'accueil »</b> pour avoir l'icône Mon Planning.";
+  $("conseil").classList.add("visible");
+}
+$("conseil-x").onclick = () => { $("conseil").classList.remove("visible"); try { localStorage.setItem("mp-conseil-vu", "1"); } catch (e) {} };
+
+/* =====================================================================
+   8. DÉMARRAGE
+   ===================================================================== */
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "127.0.0.1" || location.hostname === "localhost")) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+majBoutons();
+if (!source) {
+  etatConnexion = "erreur"; messageErreur = "Lien incomplet"; afficherEtat();
+  montrerVide("🔗 <b>Il manque le lien du planning.</b><br>Ouvre cette page en scannant le QR code affiché dans l'app Mon Planning sur le PC.");
+} else {
+  // D'abord la copie gardée (affichage immédiat), puis la version en ligne
+  try {
+    const copie = JSON.parse(localStorage.getItem(CLE_COPIE) || "null");
+    if (copie) { donnees = verifier(copie); etatConnexion = "charge"; dessiner(); afficherEtat(); }
+  } catch (e) {}
+  conseilEcranAccueil();
+  charger();
+}
+</script>
+</body>
+</html>
