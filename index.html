@@ -93,8 +93,20 @@ button { font: inherit; color: inherit; }
 
 .entete { position: sticky; top: 0; z-index: 6; display: flex; background: var(--carte); border-bottom: 1px solid var(--ligne-forte); height: 52px; }
 .entete.avec-fetes { height: 74px; }
-.coin { position: sticky; left: 0; z-index: 7; width: var(--gauche); flex: none; background: var(--carte); border-right: 1px solid var(--ligne-forte); display: flex; align-items: flex-end; padding: 0 10px 7px; font-weight: 700; color: var(--doux); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; }
+.coin { position: sticky; left: 0; z-index: 7; width: var(--gauche); flex: none; background: var(--carte); border-right: 1px solid var(--ligne-forte); display: flex; align-items: flex-end; justify-content: space-between; gap: 4px; padding: 0 6px 7px 10px; font-weight: 700; color: var(--doux); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; }
 .frise { position: relative; flex: none; }
+.btn-colonne {
+  flex: none; width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--ligne-forte); background: var(--carte);
+  color: var(--accent); font-size: 18px; font-weight: 700; line-height: 1; display: grid; place-items: center; padding: 0; margin-bottom: -3px;
+}
+.btn-colonne:active { background: var(--accent-clair); }
+/* Colonne repliée : on ne garde qu'une mince bande avec les pastilles de couleur */
+body.replie .coin { padding: 0 0 7px; justify-content: center; }
+body.replie .coin .titre-coin { display: none; }
+body.replie .gauche { padding: 0; justify-content: center; gap: 0; }
+body.replie .gauche .infos, body.replie .entete-pochette .gauche > span:not(.fleche) { display: none; }
+body.replie .pastilles i { margin-left: -6px; }
+body.replie .ligne.dans-pochette .gauche { padding-left: 4px; }
 .mois { position: absolute; top: 0; height: 22px; padding: 4px 6px; font-weight: 700; font-size: 12px; white-space: nowrap; overflow: clip; border-left: 1px solid var(--ligne-forte); text-transform: capitalize; }
 .mois span { position: sticky; left: calc(var(--gauche) + 6px); }
 .jour { position: absolute; top: 22px; height: 30px; text-align: center; font-size: 11.5px; color: var(--doux); line-height: 1.1; padding-top: 2px; }
@@ -482,6 +494,23 @@ function finCharge() {
    ===================================================================== */
 let debutFrise = null;
 function largeurJour() { return LARGEUR_JOUR[reglages.zoom] || 38; }
+/* Colonne des tâches repliée ou non (retenu par chaque téléphone) */
+let colonneRepliee = false;
+try { colonneRepliee = localStorage.getItem("mp-colonne") === "repliee"; } catch (e) {}
+function appliquerColonne() {
+  document.body.classList.toggle("replie", colonneRepliee);
+  document.documentElement.style.setProperty("--gauche", colonneRepliee ? "34px" : "146px");
+}
+function basculerColonne() {
+  const zone = $("diagramme");
+  // garder le même jour au bord gauche de la frise
+  const jourBord = debutFrise === null ? null : debutFrise + zone.scrollLeft / largeurJour();
+  colonneRepliee = !colonneRepliee;
+  try { localStorage.setItem("mp-colonne", colonneRepliee ? "repliee" : "ouverte"); } catch (e) {}
+  appliquerColonne();
+  dessiner();
+  if (jourBord !== null) zone.scrollLeft = (jourBord - debutFrise) * largeurJour();
+}
 function largeurGauche() { return parseInt(getComputedStyle(document.documentElement).getPropertyValue("--gauche")); }
 function fetesActives() { return !donnees || donnees.fetes !== false; }
 function tachesVisibles() { return donnees ? donnees.taches.filter(t => reglages.faites || !t.fait) : []; }
@@ -552,7 +581,7 @@ function dessiner() {
 
   // en-tête
   const liste = tachesVisibles();
-  html += `<div class="entete${fetesActives() ? " avec-fetes" : ""}"><div class="coin">Tâches (${liste.length})</div><div class="frise" style="width:${largeurFrise}px">`;
+  html += `<div class="entete${fetesActives() ? " avec-fetes" : ""}"><div class="coin"><span class="titre-coin">Tâches (${liste.length})</span><button class="btn-colonne" id="btn-colonne" aria-label="${colonneRepliee ? "Afficher" : "Cacher"} la colonne des tâches">${colonneRepliee ? "›" : "‹"}</button></div><div class="frise" style="width:${largeurFrise}px">`;
   for (let i = 0; i < nbJours; i++) {
     const n = debut + i, d = new Date(n * MS_JOUR), js = d.getUTCDay();
     if (d.getUTCDate() === 1 || i === 0) {
@@ -709,6 +738,7 @@ $("voile").onclick = fermerFiche;
 $("fiche-fermer").onclick = fermerFiche;
 
 $("diagramme").addEventListener("click", (e) => {
+  if (e.target.closest("#btn-colonne")) return basculerColonne();
   const enTete = e.target.closest(".entete-pochette");
   if (enTete) return basculerPochette(enTete.dataset.pochette);
   const b = e.target.closest(".barre-tache[data-id]");
@@ -775,6 +805,7 @@ $("conseil-x").onclick = () => { $("conseil").classList.remove("visible"); try {
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "127.0.0.1" || location.hostname === "localhost")) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
+appliquerColonne();
 majBoutons();
 if (!source) {
   etatConnexion = "erreur"; messageErreur = "Lien incomplet"; afficherEtat();
