@@ -78,6 +78,28 @@ button { font: inherit; color: inherit; }
 .conseil button { position: absolute; top: 6px; right: 8px; border: 0; background: transparent; font-size: 18px; color: var(--doux); }
 
 /* ---------- Diagramme ---------- */
+.corps { flex: 1; display: flex; min-height: 0; }
+.droite { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+/* Colonne des pages (repliable) */
+.pages { width: 112px; flex: none; background: #f8f9fc; border-right: 1px solid var(--ligne-forte); display: flex; flex-direction: column; gap: 2px; padding: 8px 5px calc(env(safe-area-inset-bottom) + 8px); overflow-y: auto; }
+.pages .tete { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 6px 6px; font-size: 10.5px; font-weight: 700; color: var(--doux); text-transform: uppercase; letter-spacing: .05em; }
+.pages .fleche-col { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--ligne-forte); background: var(--carte); color: var(--accent); font-size: 17px; font-weight: 700; padding: 0; flex: none; }
+.page-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 2px; border-radius: 10px; border: 0; background: transparent; width: 100%; font-size: 11.5px; color: var(--texte); position: relative; text-align: center; }
+.page-item.active { background: var(--carte); box-shadow: 0 1px 3px rgba(0,0,0,.12); font-weight: 700; }
+.page-item .ic { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 15px; }
+.page-item .ic.lettre { background: var(--coul); color: white; font-weight: 700; font-size: 13px; }
+.page-item .nom-page { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+.page-item .point-alerte { position: absolute; top: 5px; right: 18px; width: 8px; height: 8px; border-radius: 50%; background: var(--orange); border: 2px solid #f8f9fc; }
+.page-item .point-alerte.retard { background: var(--rouge); }
+.pages .separation { height: 1px; background: var(--ligne-forte); margin: 5px 6px; flex: none; }
+.pages.replie { width: 40px; padding-left: 3px; padding-right: 3px; }
+.pages.replie .tete { justify-content: center; padding: 0 0 6px; }
+.pages.replie .tete span, .pages.replie .nom-page { display: none; }
+.pages.replie .page-item .point-alerte { right: 2px; }
+.bandeau-vue { display: none; padding: 6px 10px; font-size: 12px; border-bottom: 1px solid var(--ligne); line-height: 1.35; }
+.bandeau-vue.visible { display: block; }
+.bandeau-vue.actuelles { background: #fff8ec; color: #8a5200; }
+.bandeau-vue.partage { background: var(--accent-clair); color: #3247c4; }
 .diagramme { flex: 1; overflow: auto; position: relative; background: var(--carte); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .interieur { position: relative; overflow: clip; min-height: 100%; }
 .fondgrille { position: absolute; top: 0; bottom: 0; left: var(--gauche); pointer-events: none; }
@@ -200,7 +222,13 @@ body.replie .ligne.dans-pochette .gauche { padding-left: 4px; }
 <div class="alertes" id="alertes"></div>
 <div class="conseil" id="conseil"><button id="conseil-x" aria-label="Fermer">×</button><span id="conseil-txt"></span></div>
 
-<div class="diagramme" id="diagramme"></div>
+<div class="corps">
+  <aside class="pages" id="pages"></aside>
+  <div class="droite">
+    <div class="bandeau-vue" id="bandeau-vue"></div>
+    <div class="diagramme" id="diagramme"></div>
+  </div>
+</div>
 
 <div class="voile" id="voile"></div>
 <div class="fiche" id="fiche"><div class="poignee"></div><div id="fiche-contenu"></div>
@@ -392,6 +420,41 @@ function construireStructure(taches, pochettes, tri, masquerFaites) {
   return elements;
 }
 
+/* =====================================================================
+   PAGES  (même bloc sur le PC et sur le téléphone)
+   ---------------------------------------------------------------------
+   donnees.pages = [{ id, nom, couleur }]
+   Chaque tâche a un champ "page". Une tâche rangée dans une pochette suit
+   la page de sa pochette (champ "page" de la pochette).
+   Vues spéciales : "toutes", "actuelles" (à finir bientôt), "partage" (vue partagée).
+   ===================================================================== */
+const VUES_SPECIALES = ["toutes", "actuelles", "partage"];
+function pageDe(t, pochettes) {
+  const p = t.pochette && pochettes.find(x => x.id === t.pochette);
+  return p ? p.page : t.page;
+}
+/* "Tâches actuelles" : pas terminées, à finir au plus tard mercredi de la semaine prochaine (ou en retard) */
+function limiteActuelles() {
+  const auj = aujourdhui(), js = jourSemaine(auj);
+  const lundiProchain = auj + (((8 - js) % 7) || 7);
+  return lundiProchain + 2;
+}
+function dansVue(t, vue, pochettes) {
+  if (!vue || vue === "toutes") return true;
+  if (vue === "actuelles") return !t.fait && versNum(t.fin) <= limiteActuelles();
+  if (vue === "partage") return t.visibilite === "partagee";
+  return pageDe(t, pochettes) === vue;
+}
+/* Ne garde que ce qui appartient à la vue choisie */
+function filtrerVue(taches, pochettes, vue) {
+  pochettes = pochettes || [];
+  if (!vue || vue === "toutes") return { taches, pochettes };
+  const ts = taches.filter(t => dansVue(t, vue, pochettes));
+  const utilisees = new Set(ts.map(t => t.pochette));
+  const ps = pochettes.filter(p => utilisees.has(p.id) || (!VUES_SPECIALES.includes(vue) && p.page === vue));
+  return { taches: ts, pochettes: ps };
+}
+
 function etatAlerte(t) {
   if (t.fait) return null;
   const reste = versNum(t.fin) - aujourdhui();
@@ -513,7 +576,61 @@ function basculerColonne() {
 }
 function largeurGauche() { return parseInt(getComputedStyle(document.documentElement).getPropertyValue("--gauche")); }
 function fetesActives() { return !donnees || donnees.fetes !== false; }
-function tachesVisibles() { return donnees ? donnees.taches.filter(t => reglages.faites || !t.fait) : []; }
+/* La page choisie et la colonne des pages (retenues par chaque téléphone, pour chaque lien) */
+let vueChoisie = "toutes", pagesRepliees = false;
+try {
+  vueChoisie = (source && localStorage.getItem("mp-vue-" + source.p)) || "toutes";
+  pagesRepliees = localStorage.getItem("mp-pages") === "repliee";
+} catch (e) {}
+function vueActive() {
+  if (!donnees) return "toutes";
+  const permises = ["toutes", "actuelles"].concat(donnees.type === "perso" ? ["partage"] : []);
+  return permises.includes(vueChoisie) || (donnees.pages || []).some(p => p.id === vueChoisie) ? vueChoisie : "toutes";
+}
+function donneesVue() { return filtrerVue(donnees.taches, donnees.pochettes || [], vueActive()); }
+function tachesVisibles() { return donnees ? donneesVue().taches.filter(t => reglages.faites || !t.fait) : []; }
+function changerVue(v) {
+  vueChoisie = v;
+  try { localStorage.setItem("mp-vue-" + source.p, v); } catch (e) {}
+  dessiner();
+  allerAujourdhui(false);
+}
+function dessinerPages() {
+  const zone = $("pages");
+  zone.classList.toggle("replie", pagesRepliees);
+  const v = vueActive();
+  const alerte = (filtre) => {
+    const a = donnees.taches.filter(filtre).map(etatAlerte).filter(Boolean);
+    return a.length ? (a.some(x => x.type === "retard") ? "retard" : "alerte") : null;
+  };
+  const item = (cle, icone, nom, al, couleur, lettre) => `<button class="page-item${v === cle ? " active" : ""}" data-vue="${echapper(cle)}" style="--coul:${couleurSure(couleur)}">
+      <span class="ic${lettre ? " lettre" : ""}">${icone}</span><span class="nom-page">${echapper(nom)}</span>${al ? `<span class="point-alerte${al === "retard" ? " retard" : ""}"></span>` : ""}</button>`;
+  let html = `<div class="tete"><span>Pages</span><button class="fleche-col" id="btn-pages" aria-label="${pagesRepliees ? "Afficher" : "Cacher"} les pages">${pagesRepliees ? "›" : "‹"}</button></div>`;
+  html += item("toutes", "✦", "Toutes", alerte(() => true));
+  html += item("actuelles", "⏰", "Actuelles", alerte(t => dansVue(t, "actuelles", donnees.pochettes || [])), "#f08c00");
+  if (donnees.type === "perso") html += item("partage", "👥", "Partagée", alerte(t => t.visibilite === "partagee"));
+  if ((donnees.pages || []).length) html += `<div class="separation"></div>`;
+  for (const p of donnees.pages || [])
+    html += item(p.id, echapper(((p.nom || "?").trim()[0] || "?").toUpperCase()), p.nom, alerte(t => pageDe(t, donnees.pochettes || []) === p.id), p.couleur, true);
+  zone.innerHTML = html;
+  const b = $("bandeau-vue");
+  b.className = "bandeau-vue" + (v === "actuelles" ? " visible actuelles" : v === "partage" ? " visible partage" : "");
+  b.innerHTML = v === "actuelles" ? `⏰ Pas terminées, à finir d'ici le <b>${dateCourte(versTexte(limiteActuelles()))}</b> (et en retard)`
+    : v === "partage" ? `👥 Ce que voient tes camarades avec le lien de partage` : "";
+}
+$("pages").addEventListener("click", (e) => {
+  if (e.target.closest("#btn-pages")) {
+    const zone = $("diagramme");
+    const jourBord = debutFrise === null ? null : debutFrise + zone.scrollLeft / largeurJour();
+    pagesRepliees = !pagesRepliees;
+    try { localStorage.setItem("mp-pages", pagesRepliees ? "repliee" : "ouverte"); } catch (x) {}
+    dessiner();
+    if (jourBord !== null) zone.scrollLeft = (jourBord - debutFrise) * largeurJour();
+    return;
+  }
+  const it = e.target.closest("[data-vue]");
+  if (it && donnees && it.dataset.vue !== vueActive()) changerVue(it.dataset.vue);
+});
 /* Pochettes ouvertes / fermées : chaque téléphone retient son choix (sans rien changer sur le PC) */
 let etatPochettes = {};
 try { etatPochettes = JSON.parse(localStorage.getItem("mp-pochettes") || "{}"); } catch (e) {}
@@ -607,7 +724,8 @@ function dessiner() {
   html += `</div></div>`;
 
   // pochettes et lignes (même organisation que sur le PC)
-  const elements = construireStructure(donnees.taches, donnees.pochettes || [], donnees.tri || "debut", !reglages.faites);
+  const vue = donneesVue();
+  const elements = construireStructure(vue.taches, vue.pochettes, donnees.tri || "debut", !reglages.faites);
   const H_VOIE = 34;
   const barre = (t, l) => {
     const a = etatAlerte(t);
@@ -660,9 +778,11 @@ function dessiner() {
     if (ouverte) for (const l of e.lignes) html += ligneHtml(l, p);
   }
   if (!donnees.taches.length) html += `<div class="vide">📭 <b>Aucune tâche pour l'instant.</b><br>Les tâches ajoutées sur le PC apparaîtront ici.</div>`;
+  else if (!vue.taches.length) html += `<div class="vide">📭 <b>Rien dans cette page pour l'instant.</b></div>`;
   else if (!liste.length) html += `<div class="vide">Toutes les tâches sont terminées 🎉</div>`;
   html += `</div>`;
   zone.innerHTML = html;
+  dessinerPages();
   if (premiere) allerAujourdhui(false);
   else if (decalage) zone.scrollLeft += decalage;
   dessinerAlertes();
