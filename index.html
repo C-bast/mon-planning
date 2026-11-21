@@ -497,6 +497,8 @@ function filtrerVue(taches, pochettes, vue) {
   if (!vue || vue === "toutes") return { taches, pochettes };
   const info = vue === "actuelles" ? infoActuelles(taches) : null;
   const ts = info ? taches.filter(t => info.garder.has(blocDe(t))) : taches.filter(t => dansVue(t, vue, pochettes));
+  // "Tâches actuelles" : pas de pochettes, leurs tâches et cadres s'affichent directement
+  if (info) return { taches: ts, pochettes: [] };
   const utilisees = new Set(ts.map(t => t.pochette));
   const ps = pochettes.filter(p => utilisees.has(p.id) || (!VUES_SPECIALES.includes(vue) && p.page === vue));
   return { taches: ts, pochettes: ps };
