@@ -357,7 +357,7 @@ function calculerVoies(l) {
   const fins = [];                       // pour chaque voie : le dernier jour occupé
   l.voie = {};
   for (const t of l.taches) {
-    const h = Math.min(3, Math.max(1, t.hauteur || 1)), d = versNum(t.debut);
+    const h = Math.min(5, Math.max(1, t.hauteur || 1)), d = versNum(t.debut);
     let v = 0;
     while (true) {
       let libre = true;
@@ -451,15 +451,43 @@ function pageDe(t, pochettes) {
   const p = t.pochette && pochettes.find(x => x.id === t.pochette);
   return p ? p.page : t.page;
 }
-/* "Tâches actuelles" : pas terminées, à finir au plus tard mercredi de la semaine prochaine (ou en retard) */
-function limiteActuelles() {
-  const auj = aujourdhui(), js = jourSemaine(auj);
-  const lundiProchain = auj + (((8 - js) % 7) || 7);
-  return lundiProchain + 2;
+/* "Tâches actuelles" : on cherche l'échéance la plus proche.
+   - Une suite de tâches dans un CADRE compte comme un seul bloc : sa date limite = la fin de sa dernière tâche.
+   - Une tâche hors cadre compte seule : sa date limite = sa fin.
+   On affiche la SEMAINE (lundi → dimanche) de la prochaine date limite, avec tous les blocs
+   qui expirent cette semaine-là, plus ceux déjà en retard. Ça peut être dans 3 semaines s'il n'y a rien avant. */
+function blocDe(t) { return t.cadre ? (t.cadre === true ? "l:" + cleLigne(t) : "c:" + t.cadre) : "t:" + t.id; }
+function infoActuelles(taches) {
+  const blocs = new Map();
+  for (const t of taches) {
+    const k = blocDe(t);
+    const b = blocs.get(k) || { fin: -Infinity, fini: true };
+    b.fin = Math.max(b.fin, versNum(t.fin));
+    if (!t.fait) b.fini = false;
+    blocs.set(k, b);
+  }
+  const auj = aujourdhui();
+  let prochaine = Infinity, retard = 0;
+  for (const b of blocs.values()) {
+    if (b.fini) continue;
+    if (b.fin < auj) retard++;
+    else prochaine = Math.min(prochaine, b.fin);
+  }
+  let debutSem = null, finSem = null;
+  if (prochaine !== Infinity) {
+    debutSem = prochaine; while (jourSemaine(debutSem) !== 1) debutSem--;
+    finSem = debutSem + 6;
+  }
+  const garder = new Set();
+  for (const [k, b] of blocs) {
+    if (b.fini) continue;
+    if (b.fin < auj || (debutSem !== null && b.fin >= debutSem && b.fin <= finSem)) garder.add(k);
+  }
+  return { garder, debutSem, finSem, retard };
 }
-function dansVue(t, vue, pochettes) {
+function dansVue(t, vue, pochettes, toutes) {
   if (!vue || vue === "toutes") return true;
-  if (vue === "actuelles") return !t.fait && versNum(t.fin) <= limiteActuelles();
+  if (vue === "actuelles") return infoActuelles(toutes || [t]).garder.has(blocDe(t));
   if (vue === "partage") return t.visibilite === "partagee";
   return pageDe(t, pochettes) === vue;
 }
@@ -467,7 +495,8 @@ function dansVue(t, vue, pochettes) {
 function filtrerVue(taches, pochettes, vue) {
   pochettes = pochettes || [];
   if (!vue || vue === "toutes") return { taches, pochettes };
-  const ts = taches.filter(t => dansVue(t, vue, pochettes));
+  const info = vue === "actuelles" ? infoActuelles(taches) : null;
+  const ts = info ? taches.filter(t => info.garder.has(blocDe(t))) : taches.filter(t => dansVue(t, vue, pochettes));
   const utilisees = new Set(ts.map(t => t.pochette));
   const ps = pochettes.filter(p => utilisees.has(p.id) || (!VUES_SPECIALES.includes(vue) && p.page === vue));
   return { taches: ts, pochettes: ps };
@@ -625,7 +654,8 @@ function dessinerPages() {
       <span class="ic${lettre ? " lettre" : ""}">${icone}</span><span class="nom-page">${echapper(nom)}</span>${al ? `<span class="point-alerte${al === "retard" ? " retard" : ""}"></span>` : ""}</button>`;
   let html = `<div class="tete"><span>Pages</span><button class="fleche-col" id="btn-pages" aria-label="${pagesRepliees ? "Afficher" : "Cacher"} les pages">${pagesRepliees ? "›" : "‹"}</button></div>`;
   html += item("toutes", "✦", "Toutes", alerte(() => true));
-  html += item("actuelles", "⏰", "Actuelles", alerte(t => dansVue(t, "actuelles", donnees.pochettes || [])), "#f08c00");
+  const ia = infoActuelles(donnees.taches);
+  html += item("actuelles", "⏰", "Actuelles", alerte(t => ia.garder.has(blocDe(t))), "#f08c00");
   if (donnees.type === "perso") html += item("partage", "👥", "Partagée", alerte(t => t.visibilite === "partagee"));
   if ((donnees.pages || []).length) html += `<div class="separation"></div>`;
   for (const p of donnees.pages || [])
@@ -633,7 +663,9 @@ function dessinerPages() {
   zone.innerHTML = html;
   const b = $("bandeau-vue");
   b.className = "bandeau-vue" + (v === "actuelles" ? " visible actuelles" : v === "partage" ? " visible partage" : "");
-  b.innerHTML = v === "actuelles" ? `⏰ Pas terminées, à finir d'ici le <b>${dateCourte(versTexte(limiteActuelles()))}</b> (et en retard)`
+  b.innerHTML = v === "actuelles" ? (ia.debutSem !== null
+      ? `⏰ Prochaine échéance : semaine du <b>${dateCourte(versTexte(ia.debutSem))}</b> au <b>${dateCourte(versTexte(ia.finSem))}</b>${ia.retard ? " (+ en retard)" : ""}`
+      : ia.retard ? `⏰ Seulement des tâches en retard` : `⏰ Rien à rendre pour l'instant 🎉`)
     : v === "partage" ? `👥 Ce que voient tes camarades avec le lien de partage` : "";
 }
 $("pages").addEventListener("click", (e) => {
@@ -750,7 +782,7 @@ function dessiner() {
     const x = (versNum(t.debut) - debut) * dj;
     const w = (versNum(t.fin) - versNum(t.debut) + 1) * dj;
     const haut = 9 + (l.voie[t.id] || 0) * H_VOIE;
-    const hBarre = 28 + (Math.min(3, Math.max(1, t.hauteur || 1)) - 1) * H_VOIE;
+    const hBarre = 28 + (Math.min(5, Math.max(1, t.hauteur || 1)) - 1) * H_VOIE;
     const nom = echapper(t.nom || "Sans titre");
     const dedans = w >= (t.nom || "").length * 7 + 22 || w >= 150;
     const suivante = l.taches.find(o => o !== t && (l.voie[o.id] || 0) === (l.voie[t.id] || 0) && versNum(o.debut) > versNum(t.fin));
