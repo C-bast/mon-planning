@@ -174,6 +174,7 @@ body.replie .ligne.dans-pochette .gauche { padding-left: 4px; }
 .barre-pochette.ouverte::before { left: 0; } .barre-pochette.ouverte::after { right: 0; }
 .fiche .tache-liste { display: flex; gap: 10px; align-items: center; width: 100%; padding: 11px 4px; border: 0; border-bottom: 1px solid var(--ligne); background: transparent; text-align: left; font-size: 14.5px; }
 .fiche .tache-liste small { display: block; color: var(--doux); font-size: 12px; }
+.cadre-ligne { position: absolute; top: 3px; border: 2px solid #8b93a7; border-radius: 12px; background: rgba(139,147,167,.06); pointer-events: none; z-index: 0; }
 .etiq-dehors { position: absolute; top: 0; height: var(--haut-ligne); display: flex; align-items: center; font-size: 12px; font-weight: 600; white-space: nowrap; pointer-events: none; }
 .vide { position: sticky; left: 0; z-index: 3; width: min(92vw, 420px); margin: 22px 12px; padding: 18px 20px; background: var(--carte); border: 1px dashed var(--ligne-forte); border-radius: 12px; color: var(--doux); font-size: 14.5px; line-height: 1.6; }
 .vide b { color: var(--texte); }
@@ -352,16 +353,33 @@ function calculerBornes(e, taches) {
   for (const t of taches) { e.debut = Math.min(e.debut, versNum(t.debut)); e.fin = Math.max(e.fin, versNum(t.fin)); }
 }
 function calculerVoies(l) {
-  const finsVoies = [];               // pour chaque voie : le dernier jour occupé
+  // Chaque "voie" est une sous-ligne. Une tâche de hauteur 2 ou 3 prend plusieurs voies d'un coup.
+  const fins = [];                       // pour chaque voie : le dernier jour occupé
   l.voie = {};
   for (const t of l.taches) {
-    const d = versNum(t.debut);
-    let v = finsVoies.findIndex(f => f < d);
-    if (v === -1) { v = finsVoies.length; finsVoies.push(0); }
-    finsVoies[v] = versNum(t.fin);
+    const h = Math.min(3, Math.max(1, t.hauteur || 1)), d = versNum(t.debut);
+    let v = 0;
+    while (true) {
+      let libre = true;
+      for (let k = v; k < v + h; k++) if (fins[k] !== undefined && fins[k] >= d) { libre = false; break; }
+      if (libre) break;
+      v++;
+    }
+    for (let k = v; k < v + h; k++) fins[k] = versNum(t.fin);
     l.voie[t.id] = v;
   }
-  l.nbVoies = Math.max(1, finsVoies.length);
+  l.nbVoies = Math.max(1, fins.length);
+  // Les cadres : chaque tâche peut appartenir à un cadre (champ "cadre" = nom du cadre).
+  // Un cadre entoure seulement SES tâches ; les autres tâches de la ligne restent dehors.
+  const cadres = new Map();
+  for (const t of l.taches) {
+    if (!t.cadre) continue;
+    const id = t.cadre === true ? "_" : t.cadre;
+    const c = cadres.get(id) || { id, debut: Infinity, fin: -Infinity, taches: [] };
+    c.debut = Math.min(c.debut, versNum(t.debut)); c.fin = Math.max(c.fin, versNum(t.fin)); c.taches.push(t);
+    cadres.set(id, c);
+  }
+  l.cadres = [...cadres.values()];
 }
 function nomLigne(l) { return l.taches.length ? l.taches[0].nom : (l.toutes[0] ? l.toutes[0].nom : ""); }
 
@@ -732,14 +750,15 @@ function dessiner() {
     const x = (versNum(t.debut) - debut) * dj;
     const w = (versNum(t.fin) - versNum(t.debut) + 1) * dj;
     const haut = 9 + (l.voie[t.id] || 0) * H_VOIE;
+    const hBarre = 28 + (Math.min(3, Math.max(1, t.hauteur || 1)) - 1) * H_VOIE;
     const nom = echapper(t.nom || "Sans titre");
     const dedans = w >= (t.nom || "").length * 7 + 22 || w >= 150;
     const suivante = l.taches.find(o => o !== t && (l.voie[o.id] || 0) === (l.voie[t.id] || 0) && versNum(o.debut) > versNum(t.fin));
     const place = suivante ? (versNum(suivante.debut) - versNum(t.fin) - 1) * dj : Infinity;
     const dehors = !dedans && place >= (t.nom || "").length * 7 + 10;
-    return `<div class="barre-tache${t.fait ? " faite" : ""}${a ? " " + a.type : ""}" data-id="${echapper(t.id)}" style="left:${x}px;top:${haut}px;width:${w}px;background:${couleurSure(t.couleur)}">
+    return `<div class="barre-tache${t.fait ? " faite" : ""}${a ? " " + a.type : ""}" data-id="${echapper(t.id)}" style="left:${x}px;top:${haut}px;width:${w}px;height:${hBarre}px;background:${couleurSure(t.couleur)}">
               <span class="texte">${dedans ? nom : ""}</span></div>
-            ${dehors ? `<span class="etiq-dehors" style="left:${x + w + 6}px;top:${haut - 9}px">${nom}</span>` : ""}`;
+            ${dehors ? `<span class="etiq-dehors" style="left:${x + w + 6}px;top:${haut - 9 + (hBarre - 28) / 2}px">${nom}</span>` : ""}`;
   };
   const ligneHtml = (l, p) => {
     const hauteur = Math.max(46, 10 + l.nbVoies * H_VOIE);
@@ -759,7 +778,7 @@ function dessiner() {
     const attrs = l.taches.length === 1 ? ` data-id="${echapper(l.taches[0].id)}"` : ` data-ligne="${echapper(l.cle)}"`;
     return `<div class="ligne${l.taches.length === 1 && l.taches[0].fait ? " faite" : ""}${p ? " dans-pochette" : ""}"${attrs}
               style="height:${hauteur}px${p ? `;--coul-p:${couleurSure(p.couleur)}` : ""}">
-        ${gauche}<div class="piste" style="width:${largeurFrise}px">${l.taches.map(t => barre(t, l)).join("")}</div></div>`;
+        ${gauche}<div class="piste" style="width:${largeurFrise}px">${l.cadres.map(c => `<div class="cadre-ligne" style="left:${(c.debut - debut) * dj - 5}px;width:${(c.fin - c.debut + 1) * dj + 10}px;height:${hauteur - 6}px"></div>`).join("")}${l.taches.map(t => barre(t, l)).join("")}</div></div>`;
   };
   for (const e of elements) {
     if (e.type === "ligne") { html += ligneHtml(e, null); continue; }
