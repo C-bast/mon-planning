@@ -1,6 +1,6 @@
 /* Mon Planning — "service worker" : garde la page dans le téléphone pour qu'elle s'ouvre même sans Internet.
    Les tâches, elles, sont gardées par la page elle-même (localStorage). */
-const CACHE = "mon-planning-v1";
+const CACHE = "mon-planning-v2";
 const FICHIERS = ["./", "./index.html", "./manifest.json", "./icone-192.png", "./icone-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
@@ -18,7 +18,8 @@ self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET" || url.origin !== self.location.origin) return;   // GitHub API : pas touché
   // D'abord Internet (pour avoir la dernière version de la page), sinon la copie gardée
   e.respondWith(
-    fetch(e.request).then((rep) => {
+    // "no-cache" : on demande toujours à GitHub si la page a changé (mises à jour plus rapides)
+    fetch(e.request.url, { cache: "no-cache", credentials: "same-origin" }).then((rep) => {
       if (rep.ok) { const copie = rep.clone(); caches.open(CACHE).then((c) => c.put(e.request, copie)); return rep; }
       return depuisCache(e.request).then((r) => r || rep);     // erreur du serveur : on prend la copie si on l'a
     }).catch(() => depuisCache(e.request).then((r) => r || Response.error()))
