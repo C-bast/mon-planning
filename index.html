@@ -457,6 +457,7 @@ function pageDe(t, pochettes) {
    On affiche la SEMAINE (lundi → dimanche) de la prochaine date limite, avec tous les blocs
    qui expirent cette semaine-là, plus ceux déjà en retard. Ça peut être dans 3 semaines s'il n'y a rien avant. */
 function blocDe(t) { return t.cadre ? (t.cadre === true ? "l:" + cleLigne(t) : "c:" + t.cadre) : "t:" + t.id; }
+const JOURS_ACTUELLES = 8;   // + tout ce qui doit être fini dans les 8 prochains jours
 function infoActuelles(taches) {
   const blocs = new Map();
   for (const t of taches) {
@@ -481,7 +482,7 @@ function infoActuelles(taches) {
   const garder = new Set();
   for (const [k, b] of blocs) {
     if (b.fini) continue;
-    if (b.fin < auj || (debutSem !== null && b.fin >= debutSem && b.fin <= finSem)) garder.add(k);
+    if (b.fin < auj || b.fin <= auj + JOURS_ACTUELLES || (debutSem !== null && b.fin >= debutSem && b.fin <= finSem)) garder.add(k);
   }
   return { garder, debutSem, finSem, retard };
 }
@@ -666,7 +667,7 @@ function dessinerPages() {
   const b = $("bandeau-vue");
   b.className = "bandeau-vue" + (v === "actuelles" ? " visible actuelles" : v === "partage" ? " visible partage" : "");
   b.innerHTML = v === "actuelles" ? (ia.debutSem !== null
-      ? `⏰ Prochaine échéance : semaine du <b>${dateCourte(versTexte(ia.debutSem))}</b> au <b>${dateCourte(versTexte(ia.finSem))}</b>${ia.retard ? " (+ en retard)" : ""}`
+      ? `⏰ Prochaine échéance : semaine du <b>${dateCourte(versTexte(ia.debutSem))}</b> au <b>${dateCourte(versTexte(ia.finSem))}</b> + les ${JOURS_ACTUELLES} prochains jours${ia.retard ? " (+ en retard)" : ""}`
       : ia.retard ? `⏰ Seulement des tâches en retard` : `⏰ Rien à rendre pour l'instant 🎉`)
     : v === "partage" ? `👥 Ce que voient tes camarades avec le lien de partage` : "";
 }
