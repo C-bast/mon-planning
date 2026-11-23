@@ -174,6 +174,10 @@ body.replie .ligne.dans-pochette .gauche { padding-left: 4px; }
 .barre-pochette.ouverte::before { left: 0; } .barre-pochette.ouverte::after { right: 0; }
 .fiche .tache-liste { display: flex; gap: 10px; align-items: center; width: 100%; padding: 11px 4px; border: 0; border-bottom: 1px solid var(--ligne); background: transparent; text-align: left; font-size: 14.5px; }
 .fiche .tache-liste small { display: block; color: var(--doux); font-size: 12px; }
+.barre-fantome { position: absolute; height: 28px; border-radius: 7px; border: 2px dashed var(--coul); background: color-mix(in srgb, var(--coul) 10%, transparent);
+  color: var(--coul); display: flex; align-items: center; z-index: 1; pointer-events: none; opacity: .9; box-sizing: border-box; }
+.barre-fantome .texte { position: sticky; left: calc(var(--gauche) + 2px); padding: 0 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; font-weight: 600; }
+.col-vacances { position: absolute; top: 0; bottom: 0; background: rgba(31,169,113,.07); }
 .cadre-ligne { position: absolute; top: 3px; border: 2px solid #8b93a7; border-radius: 12px; background: rgba(139,147,167,.06); pointer-events: none; z-index: 0; }
 .etiq-dehors { position: absolute; top: 0; height: var(--haut-ligne); display: flex; align-items: center; font-size: 12px; font-weight: 600; white-space: nowrap; pointer-events: none; }
 .vide { position: sticky; left: 0; z-index: 3; width: min(92vw, 420px); margin: 22px 12px; padding: 18px 20px; background: var(--carte); border: 1px dashed var(--ligne-forte); border-radius: 12px; color: var(--doux); font-size: 14.5px; line-height: 1.6; }
@@ -486,6 +490,65 @@ function infoActuelles(taches) {
   }
   return { garder, debutSem, finSem, retard };
 }
+/* =====================================================================
+   MODE RÉVISION  (même bloc sur le PC et sur le téléphone)
+   ---------------------------------------------------------------------
+   Une tâche avec "revision" (un contrôle, un oral…) reçoit des tâches
+   FANTÔMES « 📚 Réviser », sur sa ligne, les jours d'avant.
+   Chaque jour est vérifié :
+     - s'il y a déjà une tâche sur la même ligne ce jour-là -> pas de révision
+     - jour de semaine avec plus de 3 tâches -> trop chargé -> pas de révision
+     - week-end, jour férié ou vacances : trop chargé seulement au-delà de 5 tâches
+   Les fantômes ne sont pas enregistrés : ils sont recalculés à chaque affichage.
+   ===================================================================== */
+const REVISION_MAX_NORMAL = 3;    // jour normal : plus de 3 tâches = trop chargé
+const REVISION_MAX_LIBRE = 5;     // week-end / jour férié / vacances : plus de 5 = trop chargé
+const REVISION_RECUL = 14;        // on cherche des jours au plus 14 jours avant
+const REVISION_DEFAUT = 3;        // nombre de jours de révision proposé par défaut
+function nbRevisions(t) { return !t.revision ? 0 : typeof t.revision === "number" ? Math.min(7, Math.max(1, Math.round(t.revision))) : REVISION_DEFAUT; }
+function enVacances(n, vacances) {
+  return (vacances || []).some(v => v && v.debut && v.fin && n >= versNum(v.debut) && n <= versNum(v.fin));
+}
+function jourLibre(n, vacances) {
+  const js = jourSemaine(n);
+  return js === 0 || js === 6 || fetesEntre(n, n).some(f => f.ferie) || enVacances(n, vacances);
+}
+/* Renvoie une Map : id de la tâche -> liste de blocs { debut, fin } (jours qui se suivent regroupés) */
+function calculerRevisions(taches, vacances) {
+  const auj = aujourdhui();
+  const couvre = (t, n) => versNum(t.debut) <= n && versNum(t.fin) >= n;
+  // 1. combien de tâches à faire chaque jour (à partir d'aujourd'hui)
+  const charge = new Map();
+  for (const t of taches) {
+    if (t.fait || !t.debut || !t.fin) continue;
+    const d = Math.max(versNum(t.debut), auj), f = Math.min(versNum(t.fin), d + 400);
+    for (let n = d; n <= f; n++) charge.set(n, (charge.get(n) || 0) + 1);
+  }
+  // 2. les contrôles / oraux, du plus proche au plus lointain
+  const examens = taches.filter(t => nbRevisions(t) && !t.fait && t.debut && versNum(t.debut) > auj)
+    .sort((a, b) => versNum(a.debut) - versNum(b.debut));
+  const res = new Map();
+  for (const ex of examens) {
+    const voulu = nbRevisions(ex), debutEx = versNum(ex.debut), cle = cleLigne(ex);
+    const voisines = taches.filter(x => x !== ex && cleLigne(x) === cle);
+    const jours = [];
+    for (let n = debutEx - 1; n >= Math.max(auj, debutEx - REVISION_RECUL) && jours.length < voulu; n--) {
+      if (voisines.some(x => couvre(x, n))) continue;                         // la ligne est déjà prise ce jour-là
+      const max = jourLibre(n, vacances) ? REVISION_MAX_LIBRE : REVISION_MAX_NORMAL;
+      if ((charge.get(n) || 0) > max) continue;                               // journée trop chargée
+      jours.push(n);
+    }
+    jours.sort((a, b) => a - b);
+    for (const n of jours) charge.set(n, (charge.get(n) || 0) + 1);           // une révision compte comme une tâche
+    const blocs = [];
+    for (const n of jours) {
+      const b = blocs[blocs.length - 1];
+      if (b && b.fin === n - 1) b.fin = n; else blocs.push({ debut: n, fin: n });
+    }
+    if (blocs.length) res.set(ex.id, blocs);
+  }
+  return res;
+}
 function dansVue(t, vue, pochettes, toutes) {
   if (!vue || vue === "toutes") return true;
   if (vue === "actuelles") return infoActuelles(toutes || [t]).garder.has(blocDe(t));
@@ -746,6 +809,12 @@ function dessiner() {
     html += f.ferie ? `<div class="col-ferie" style="left:${x}px;width:${dj}px"></div>`
                     : `<div class="col-fete" style="left:${x + Math.floor(dj / 2)}px"></div>`;
   }
+  const vacances = Array.isArray(donnees.vacances) ? donnees.vacances : [];
+  for (const v of vacances) {
+    if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v.debut || "") || !/^\d{4}-\d{2}-\d{2}$/.test(v.fin || "")) continue;
+    const a = Math.max(versNum(v.debut), debut), b = Math.min(versNum(v.fin), debut + nbJours - 1);
+    if (b >= a) html += `<div class="col-vacances" style="left:${(a - debut) * dj}px;width:${(b - a + 1) * dj}px"></div>`;
+  }
   const numsFeries = new Set(fetesVisibles.filter(f => f.ferie).map(f => f.num));
   html += `</div><div class="masque-gauche"><div></div></div>`;
 
@@ -780,6 +849,12 @@ function dessiner() {
   const vue = donneesVue();
   const elements = construireStructure(vue.taches, vue.pochettes, donnees.tri || "debut", !reglages.faites);
   const H_VOIE = 34;
+  const revisions = calculerRevisions(donnees.taches || [], vacances);       // les tâches fantômes 📚
+  const fantomes = (t, l) => (revisions.get(t.id) || []).map(b => {
+    const x = (b.debut - debut) * dj, w = (b.fin - b.debut + 1) * dj;
+    const txt = w >= 140 ? `📚 Réviser : ${echapper(t.nom || "")}` : w >= 64 ? "📚 Réviser" : "📚";
+    return `<div class="barre-fantome" style="left:${x + 1}px;top:${9 + (l.voie[t.id] || 0) * H_VOIE}px;width:${w - 2}px;--coul:${couleurSure(t.couleur)}"><span class="texte">${txt}</span></div>`;
+  }).join("");
   const barre = (t, l) => {
     const a = etatAlerte(t);
     const x = (versNum(t.debut) - debut) * dj;
@@ -788,8 +863,14 @@ function dessiner() {
     const hBarre = 28 + (Math.min(5, Math.max(1, t.hauteur || 1)) - 1) * H_VOIE;
     const nom = echapper(t.nom || "Sans titre");
     const dedans = w >= (t.nom || "").length * 7 + 22 || w >= 150;
-    const suivante = l.taches.find(o => o !== t && (l.voie[o.id] || 0) === (l.voie[t.id] || 0) && versNum(o.debut) > versNum(t.fin));
-    const place = suivante ? (versNum(suivante.debut) - versNum(t.fin) - 1) * dj : Infinity;
+    const voieT = l.voie[t.id] || 0, finT = versNum(t.fin);
+    let prochain = Infinity;               // la tâche ou la révision fantôme qui suit sur la même voie
+    for (const o of l.taches) {
+      if (o === t || (l.voie[o.id] || 0) !== voieT) continue;
+      if (versNum(o.debut) > finT) prochain = Math.min(prochain, versNum(o.debut));
+      for (const b of revisions.get(o.id) || []) if (b.debut > finT) prochain = Math.min(prochain, b.debut);
+    }
+    const place = prochain === Infinity ? Infinity : (prochain - finT - 1) * dj;
     const dehors = !dedans && place >= (t.nom || "").length * 7 + 10;
     return `<div class="barre-tache${t.fait ? " faite" : ""}${a ? " " + a.type : ""}" data-id="${echapper(t.id)}" style="left:${x}px;top:${haut}px;width:${w}px;height:${hBarre}px;background:${couleurSure(t.couleur)}">
               <span class="texte">${dedans ? nom : ""}</span></div>
@@ -802,7 +883,7 @@ function dessiner() {
       const t = l.taches[0], a = etatAlerte(t);
       const icone = perso && t.visibilite !== "partagee" ? "🔒 " : "";
       gauche = `<div class="gauche"><span class="pastille" style="background:${couleurSure(t.couleur)}"></span>
-          <div class="infos"><div class="nom">${icone}${echapper(t.nom || "Sans titre")}</div>
+          <div class="infos"><div class="nom">${icone}${nbRevisions(t) ? "📚 " : ""}${echapper(t.nom || "Sans titre")}</div>
           <div class="dates">${a ? `<span class="${a.type}-txt">${a.type === "retard" ? "⚠" : "⏰"} ${a.court}</span>` : `${dateCourte(t.debut)} → ${dateCourte(t.fin)}`}</div></div></div>`;
     } else {
       const a = l.taches.map(etatAlerte).filter(Boolean).sort((x, y) => x.reste - y.reste)[0];
@@ -813,7 +894,7 @@ function dessiner() {
     const attrs = l.taches.length === 1 ? ` data-id="${echapper(l.taches[0].id)}"` : ` data-ligne="${echapper(l.cle)}"`;
     return `<div class="ligne${l.taches.length === 1 && l.taches[0].fait ? " faite" : ""}${p ? " dans-pochette" : ""}"${attrs}
               style="height:${hauteur}px${p ? `;--coul-p:${couleurSure(p.couleur)}` : ""}">
-        ${gauche}<div class="piste" style="width:${largeurFrise}px">${l.cadres.map(c => `<div class="cadre-ligne" style="left:${(c.debut - debut) * dj - 5}px;width:${(c.fin - c.debut + 1) * dj + 10}px;height:${hauteur - 6}px"></div>`).join("")}${l.taches.map(t => barre(t, l)).join("")}</div></div>`;
+        ${gauche}<div class="piste" style="width:${largeurFrise}px">${l.cadres.map(c => `<div class="cadre-ligne" style="left:${(c.debut - debut) * dj - 5}px;width:${(c.fin - c.debut + 1) * dj + 10}px;height:${hauteur - 6}px"></div>`).join("")}${l.taches.map(t => fantomes(t, l)).join("")}${l.taches.map(t => barre(t, l)).join("")}</div></div>`;
   };
   for (const e of elements) {
     if (e.type === "ligne") { html += ligneHtml(e, null); continue; }
